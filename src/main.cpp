@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <PS4Controller.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
+Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 
 #define DIR1_L 13
 #define PWM1_L 12
@@ -11,24 +14,72 @@
 #define PWM2_R 21
 #define MAX_DRIVE 255
 #define DEADBANDPWM 10
-
-void printPS4();
-void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
-void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
-void setup() {
-  Serial.begin(115200);
-  PS4.begin("5c:f3:70:a6:b8:38");
-  Serial.println("Ready.");
-}
-
 int16_t backRightDrive = 0;
 int16_t backLeftDrive = 0;
 int16_t frontRightDrive = 0;
 int16_t frontLeftDrive = 0;
 
+void printPS4();
+void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
+void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
+void displaySetup();
+void displayJoystick();
+void clearSpace();
+
+void setup() {
+
+  pinMode(DIR1_L, OUTPUT);
+  pinMode(PWM1_L, OUTPUT);
+  pinMode(DIR2_L, OUTPUT);
+  pinMode(PWM2_L, OUTPUT);
+  pinMode(DIR1_R, OUTPUT);
+  pinMode(PWM1_R, OUTPUT);
+  pinMode(DIR2_R, OUTPUT);
+  pinMode(PWM2_R, OUTPUT);
+
+  Serial.begin(115200);
+  displaySetup();
+  //address that PS4 controller is paired to
+  PS4.begin("5c:f3:70:a6:b8:38");
+  Serial.println("Ready.");
+  while(!PS4.isConnected()){
+    display.setCursor(0,0);
+    display.getCursorX();
+    display.println("Waiting to connect");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect.");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect..");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect...");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect..");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect..");
+    display.display();
+    delay(200);
+    display.println("Waiting to connect.");
+    display.display();
+    delay(200);
+    display.clearDisplay();
+    display.display();
+  }
+}
+
+
+
 unsigned long lastDriveTime = 0;//milliseconds
 unsigned long driveDelay = 10;
+unsigned long lastPrintTime = 0;
+unsigned long lastPrintDelay = 100;
+
 void loop() {
+  
   // Below has all accessible outputs from the controller
   if (millis()-lastDriveTime > driveDelay){
     if(PS4.isConnected()){ 
@@ -41,13 +92,64 @@ void loop() {
     }
     lastDriveTime = millis();
   }
+
+  if(millis()-lastPrintTime > lastPrintDelay && PS4.isConnected()){
+    displayJoystick();
+    lastPrintTime = millis();
+  }
+}
+//Configures the adafruit featherWing OLED display
+void displaySetup(){
+  delay(250); // wait for the OLED to power up
+  display.begin(0x3C, true); // Address 0x3C default
+  display.display();
+  delay(1000);
+  display.setRotation(1);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0,0);
+  delay(1000);
+  display.clearDisplay();
+  display.display();
 }
 
+void displayJoystick(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  
+  display.print("LJoy X: ");
+  clearSpace();
+  display.println(PS4.LStickX());
+  
+  display.print("LJoy Y: ");
+  clearSpace();
+  display.println(PS4.LStickY());
+  
+  display.print("RJoy X: ");
+  clearSpace();
+  display.println(PS4.RStickX());
+  
+  display.print("RJoy Y: ");
+  clearSpace();
+  display.println(PS4.RStickY());
+  
+  display.display();
+}
+
+//clears 5 spaces on the display for text but returns cursor
+//still need to run display() to send to screen
+void clearSpace(){
+  int x = display.getCursorX();
+  int y = display.getCursorY();
+  display.print("     ");
+  display.setCursor(x, y);
+  
+}
 //Function that uses PWM to drive the motors
 //Values should be from -255 to 255
 //Positive values always drive the robot forward
 //defaults to the 4 drive variables as input
-void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive){
+void drive(int16_t backRight, int16_t backLeft , int16_t frontRight, int16_t frontLeft){
   //constrain drive PWM to hardware limit
   backRight = constrain(backRight, -MAX_DRIVE, MAX_DRIVE);
   backLeft = constrain(backLeft, -MAX_DRIVE, MAX_DRIVE);
@@ -79,7 +181,7 @@ void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive,
 }
 //Takes joystick values from -127 to 127 of two joystick channels
 //Typical channel is the left Y channel Ch1 for and the right Ychannel for channel 2
-void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive){
+void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
     //Double joystick to match joystick range to PWM Range
     ch1 *= 2;
     ch2 *= 2;
