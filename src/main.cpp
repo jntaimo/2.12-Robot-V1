@@ -10,8 +10,8 @@ Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 #define PWM2_L 15
 #define DIR1_R A0
 #define PWM1_R A1
-#define DIR2_R A2
-#define PWM2_R A3
+#define DIR2_R 32
+#define PWM2_R 14
 #define MAX_DRIVE 255
 #define DEADBANDPWM 10
 int16_t backRightDrive = 0;
@@ -22,13 +22,16 @@ int16_t frontLeftDrive = 0;
 void printPS4();
 void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
 void tankJoystickDrive(int16_t ch1, int16_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t & frontLeft = frontLeftDrive);
+void singleJoystickDrive(int16_t X, int16_t Y,int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
+void mecanumDrive(int16_t LX, int16_t LY,int16_t RX, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
 void displaySetup();
 void displayJoystick();
 void clearSpace();
 
 enum DriveMode {
   TANK_DRIVE,
-  ONE_JOY_DRIVE
+  ONE_JOY_DRIVE,
+  MECANUM
 };
 //default to tank drive
 DriveMode driveMode = TANK_DRIVE;
@@ -87,12 +90,31 @@ unsigned long lastPrintDelay = 100;
 
 void loop() {
   
-  // Below has all accessible outputs from the controller
+  //Read joystick at interval
   if (millis()-lastDriveTime > driveDelay){
     if(PS4.isConnected()){ 
+      if (PS4.Square()) driveMode = TANK_DRIVE;
+      if (PS4.Triangle()) driveMode = ONE_JOY_DRIVE;
+      if (PS4.Circle()) driveMode = MECANUM;
       //use tank drive
-      tankJoystickDrive(PS4.LStickY(), PS4.RStickY());
-      PS4.setRumble(0,abs(frontLeftDrive + frontRightDrive)/2);
+      switch (driveMode){
+        case TANK_DRIVE:
+          tankJoystickDrive(PS4.LStickY(), PS4.RStickY());
+          break;
+        case ONE_JOY_DRIVE:
+          singleJoystickDrive(PS4.RStickX(), PS4.RStickY());
+          break;
+        case MECANUM:
+          mecanumDrive(PS4.LStickX(), PS4.LStickY(), PS4.RStickY());
+          break;
+
+      }
+      int vroom = abs(frontLeftDrive + frontRightDrive)/2;
+      if (vroom > 50){
+        PS4.setRumble(0,vroom);
+      } else {
+        PS4.setRumble(0,0);
+      }
       PS4.setLed(abs(frontLeftDrive), 0, abs(frontRightDrive));
       PS4.sendToController();
       drive();
@@ -174,16 +196,16 @@ void drive(int16_t backRight, int16_t backLeft , int16_t frontRight, int16_t fro
   frontLeft = constrain(frontLeft, -MAX_DRIVE, MAX_DRIVE);
 
   //Deadband to ignore slight joystick drift
-  if (abs(backRight < DEADBANDPWM)) backRight = 0;
-  if (abs(backLeft < DEADBANDPWM)) backLeft = 0;
-  if (abs(frontRight < DEADBANDPWM)) frontRight = 0;
-  if (abs(frontLeft < DEADBANDPWM)) frontLeft = 0;
+  if (abs(backRight) < DEADBANDPWM) backRight = 0;
+  if (abs(backLeft) < DEADBANDPWM) backLeft = 0;
+  if (abs(frontRight) < DEADBANDPWM) frontRight = 0;
+  if (abs(frontLeft) < DEADBANDPWM) frontLeft = 0;
 
   //store wheel directions based on if input is negative
-  bool dirBR = backRight < 0;
+  bool dirBR = backRight > 0;
   bool dirBL = backLeft < 0;
   bool dirFR = frontRight > 0;
-  bool dirFL = frontLeft > 0;
+  bool dirFL = frontLeft < 0;
 
   //drive motor
   digitalWrite(DIR2_R,dirBR);
@@ -195,6 +217,21 @@ void drive(int16_t backRight, int16_t backLeft , int16_t frontRight, int16_t fro
   analogWrite(PWM2_L,abs(backLeft));
   analogWrite(PWM1_R,abs(frontRight));
   analogWrite(PWM1_L,abs(frontLeft));  
+}
+
+//Mecanum drive based on the source
+//https://gm0.org/en/latest/docs/software/tutorials/mecanum-drive.html
+void mecanumDrive(int16_t LX, int16_t LY,int16_t RX, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
+  double y = -LY;
+  double x = LX*1.1;
+  double rx = RX;
+
+  double denominator = max(abs(y)+abs(x) +abs(rx), 1.0);
+  
+  backRightDrive = (y + x - rx) / denominator;
+  backLeftDrive = (y - x + rx) / denominator;
+  frontRightDrive = (y - x - rx) / denominator;
+  frontLeftDrive= (y + x + rx) / denominator;
 }
 //Takes joystick values from -127 to 127 of two joystick channels
 //Typical channel is the left Y channel Ch1 for and the right Ychannel for channel 2
