@@ -10,8 +10,11 @@
 #define DIR2_R 14
 #define PWM2_R 21
 #define MAX_DRIVE 255
+#define DEADBANDPWM 10
+
 void printPS4();
-void drive(int16_t backRight, int16_t backLeft, int16_t frontRight, int16_t frontLeft);
+void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
+void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
 void setup() {
   Serial.begin(115200);
   PS4.begin("5c:f3:70:a6:b8:38");
@@ -23,20 +26,39 @@ int16_t backLeftDrive = 0;
 int16_t frontRightDrive = 0;
 int16_t frontLeftDrive = 0;
 
+unsigned long lastDriveTime = 0;//milliseconds
+unsigned long driveDelay = 10;
 void loop() {
   // Below has all accessible outputs from the controller
-
+  if (millis()-lastDriveTime > driveDelay){
+    if(PS4.isConnected()){ 
+      //use tank drive
+      tankJoystickDrive(PS4.LStickY(), PS4.RStickY());
+      drive();
+    } else {
+      //turn off the motors if the controller disconnects
+      drive(0, 0, 0, 0);
+    }
+    lastDriveTime = millis();
+  }
 }
 
 //Function that uses PWM to drive the motors
 //Values should be from -255 to 255
 //Positive values always drive the robot forward
-void drive(int16_t backRight, int16_t backLeft, int16_t frontRight, int16_t frontLeft){
+//defaults to the 4 drive variables as input
+void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive){
   //constrain drive PWM to hardware limit
   backRight = constrain(backRight, -MAX_DRIVE, MAX_DRIVE);
   backLeft = constrain(backLeft, -MAX_DRIVE, MAX_DRIVE);
   frontRight = constrain(frontRight, -MAX_DRIVE, MAX_DRIVE);
   frontLeft = constrain(frontLeft, -MAX_DRIVE, MAX_DRIVE);
+
+  //Deadband to ignore slight joystick drift
+  if (abs(backRight < DEADBANDPWM)) backRight = 0;
+  if (abs(backLeft < DEADBANDPWM)) backLeft = 0;
+  if (abs(frontRight < DEADBANDPWM)) frontRight = 0;
+  if (abs(frontLeft < DEADBANDPWM)) frontLeft = 0;
 
   //store wheel directions based on if input is negative
   bool dirBR = backRight < 0;
@@ -50,14 +72,14 @@ void drive(int16_t backRight, int16_t backLeft, int16_t frontRight, int16_t fron
   digitalWrite(DIR1_R,dirFR);
   digitalWrite(DIR1_L,dirFL);
 
-  analogWrite(PWM2_R,backRight);
-  analogWrite(PWM2_L,backLeft);
-  analogWrite(PWM1_R,frontRight);
-  analogWrite(PWM1_L,frontLeft);  
+  analogWrite(PWM2_R,abs(backRight));
+  analogWrite(PWM2_L,abs(backLeft));
+  analogWrite(PWM1_R,abs(frontRight));
+  analogWrite(PWM1_L,abs(frontLeft));  
 }
 //Takes joystick values from -127 to 127 of two joystick channels
 //Typical channel is the left Y channel Ch1 for and the right Ychannel for channel 2
-void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
+void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive){
     //Double joystick to match joystick range to PWM Range
     ch1 *= 2;
     ch2 *= 2;
