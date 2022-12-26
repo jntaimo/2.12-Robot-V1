@@ -4,14 +4,14 @@
 #include <Adafruit_SH110X.h>
 Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 
-#define DIR1_L 13
-#define PWM1_L 12
-#define DIR2_L 27
-#define PWM2_L 33
-#define DIR1_R 15
-#define PWM1_R 32
-#define DIR2_R 14
-#define PWM2_R 21
+#define DIR1_L 12
+#define PWM1_L 27
+#define DIR2_L 33
+#define PWM2_L 15
+#define DIR1_R A0
+#define PWM1_R A1
+#define DIR2_R A2
+#define PWM2_R A3
 #define MAX_DRIVE 255
 #define DEADBANDPWM 10
 int16_t backRightDrive = 0;
@@ -21,10 +21,17 @@ int16_t frontLeftDrive = 0;
 
 void printPS4();
 void drive(int16_t backRight = backRightDrive, int16_t backLeft = backLeftDrive, int16_t frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
-void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t frontLeft = frontLeftDrive);
+void tankJoystickDrive(int16_t ch1, int16_t ch2, int16_t & backRight = backRightDrive, int16_t & backLeft = backLeftDrive, int16_t & frontRight = frontRightDrive, int16_t & frontLeft = frontLeftDrive);
 void displaySetup();
 void displayJoystick();
 void clearSpace();
+
+enum DriveMode {
+  TANK_DRIVE,
+  ONE_JOY_DRIVE
+};
+//default to tank drive
+DriveMode driveMode = TANK_DRIVE;
 
 void setup() {
 
@@ -85,6 +92,9 @@ void loop() {
     if(PS4.isConnected()){ 
       //use tank drive
       tankJoystickDrive(PS4.LStickY(), PS4.RStickY());
+      PS4.setRumble(0,abs(frontLeftDrive + frontRightDrive)/2);
+      PS4.setLed(abs(frontLeftDrive), 0, abs(frontRightDrive));
+      PS4.sendToController();
       drive();
     } else {
       //turn off the motors if the controller disconnects
@@ -133,6 +143,14 @@ void displayJoystick(){
   clearSpace();
   display.println(PS4.RStickY());
   
+  display.print("Left Drive: ");
+  clearSpace();
+  display.println(frontLeftDrive);
+
+  display.print("Right Drive: ");
+  clearSpace();
+  display.println(frontRightDrive);
+
   display.display();
 }
 
@@ -143,7 +161,6 @@ void clearSpace(){
   int y = display.getCursorY();
   display.print("     ");
   display.setCursor(x, y);
-  
 }
 //Function that uses PWM to drive the motors
 //Values should be from -255 to 255
@@ -181,25 +198,25 @@ void drive(int16_t backRight, int16_t backLeft , int16_t frontRight, int16_t fro
 }
 //Takes joystick values from -127 to 127 of two joystick channels
 //Typical channel is the left Y channel Ch1 for and the right Ychannel for channel 2
-void tankJoystickDrive(int8_t ch1, int8_t ch2, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
+void tankJoystickDrive(int16_t ch1, int16_t ch2, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t & frontLeft){
     //Double joystick to match joystick range to PWM Range
-    ch1 *= 2;
-    ch2 *= 2;
+    ch1 = ch1*2 + 1;
+    ch2 = ch2*2 + 1;
     //Map left drive to ch1 and right drive to ch 2
     backRight = ch2;
     backLeft = ch1;
     frontRight = ch2;
-    frontLeft;
+    frontLeft = ch1;
 }
 
 //Takes joystick values from -127 to 127 of a single joystick
 //Outputs desired power for left and right drive train  (-255, 255) 
 //changes the 4 drive power variables as inputs
 //Based on formula here https://home.kendra.com/mauser/Joystick.html
-void singleJoystickDrive(int8_t X, int8_t Y,int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
+void singleJoystickDrive(int16_t X, int16_t Y,int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
   //Double joystick to match joystick range to PWM range
-  X *= 2;
-  Y *= 2;
+  X = X*2 + 1;
+  Y = Y*2 + 1;
   //flip X
   X = -X;
   //intermediate calculations
