@@ -13,7 +13,7 @@ Adafruit_SH1107 display = Adafruit_SH1107(64, 128, &Wire);
 #define DIR2_R 32
 #define PWM2_R 14
 #define MAX_DRIVE 255
-#define DEADBANDPWM 10
+#define DEADBANDPWM 15
 int16_t backRightDrive = 0;
 int16_t backLeftDrive = 0;
 int16_t frontRightDrive = 0;
@@ -96,7 +96,7 @@ void loop() {
       if (PS4.Square()) driveMode = TANK_DRIVE;
       if (PS4.Triangle()) driveMode = ONE_JOY_DRIVE;
       if (PS4.Circle()) driveMode = MECANUM;
-      //use tank drive
+      //use tank drive`
       switch (driveMode){
         case TANK_DRIVE:
           tankJoystickDrive(PS4.LStickY(), PS4.RStickY());
@@ -105,7 +105,7 @@ void loop() {
           singleJoystickDrive(PS4.RStickX(), PS4.RStickY());
           break;
         case MECANUM:
-          mecanumDrive(PS4.LStickX(), PS4.LStickY(), PS4.RStickY());
+          mecanumDrive(PS4.LStickX(), PS4.LStickY(), PS4.RStickX());
           break;
 
       }
@@ -222,16 +222,15 @@ void drive(int16_t backRight, int16_t backLeft , int16_t frontRight, int16_t fro
 //Mecanum drive based on the source
 //https://gm0.org/en/latest/docs/software/tutorials/mecanum-drive.html
 void mecanumDrive(int16_t LX, int16_t LY,int16_t RX, int16_t & backRight, int16_t & backLeft, int16_t & frontRight, int16_t frontLeft){
-  double y = -LY;
-  double x = LX*1.1;
-  double rx = RX;
+  double y = LY*2;
+  double x = LX*1.1*2;
+  double rx = RX*2;
 
-  double denominator = max(abs(y)+abs(x) +abs(rx), 1.0);
-  
-  backRightDrive = (y + x - rx) / denominator;
-  backLeftDrive = (y - x + rx) / denominator;
-  frontRightDrive = (y - x - rx) / denominator;
-  frontLeftDrive= (y + x + rx) / denominator;
+  double denominator = max(abs(y)/MAX_DRIVE+abs(x)/MAX_DRIVE +abs(rx)/MAX_DRIVE, 1.0); 
+  backRightDrive = double(y + x - rx)/denominator;
+  backLeftDrive = double(y - x + rx)/ denominator;
+  frontRightDrive = double(y - x - rx)/ denominator;
+  frontLeftDrive= double(y + x + rx)/ denominator;
 }
 //Takes joystick values from -127 to 127 of two joystick channels
 //Typical channel is the left Y channel Ch1 for and the right Ychannel for channel 2
@@ -257,17 +256,18 @@ void singleJoystickDrive(int16_t X, int16_t Y,int16_t & backRight, int16_t & bac
   //flip X
   X = -X;
   //intermediate calculations
-  int V =  (MAX_DRIVE-abs(X))*(Y/MAX_DRIVE) + Y;
-  int W = (MAX_DRIVE-abs(Y))*(X/MAX_DRIVE) + X;
+  double V =  double(MAX_DRIVE-abs(X))*(Y/MAX_DRIVE) + Y;
+  double W = double(MAX_DRIVE-abs(Y))*(X/MAX_DRIVE) + X;
   //output values
-  int rightDrive = (V+W)/2;
-  int leftDrive = (V-W)/2;
+  double rightDrive = (V+W)/2;
+  double leftDrive = (V-W)/2;
 
   backRight = rightDrive;
   backLeft = leftDrive;
   frontRight = rightDrive;
   frontLeft = leftDrive;
 }
+
 void printPS4(){
   if (PS4.isConnected()) {
     if (PS4.Right()) Serial.println("Right Button");
